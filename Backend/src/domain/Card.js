@@ -3,13 +3,14 @@ export default class Card {
     this.suit = suit;
     this.rank = rank;
     this.isRevealed = false;
+    this.aceValue = 11;
   }
 
   reveal() {
     this.isRevealed = true;
   }
 
-  isAs() {
-    return this.rank === "A";
+  setAceValue(value) {
+    this.aceValue = value;
   }
 }
