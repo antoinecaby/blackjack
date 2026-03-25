@@ -1,3 +1,5 @@
+const API_BASE_URL = "http://localhost:3000";
+
 const modal = document.getElementById("popupLogin");
 const authArea = document.getElementById("authArea");
 const closeBtn = document.querySelector(".close");
@@ -71,7 +73,10 @@ async function safeJson(response) {
 
 async function checkAuth() {
   try {
-    const response = await fetch("/api/me");
+    const response = await fetch(`${API_BASE_URL}/api/me`, {
+      credentials: "include",
+    });
+
     const data = await safeJson(response);
 
     if (data.loggedIn) {
@@ -95,8 +100,9 @@ async function checkAuth() {
 
 async function logout() {
   try {
-    const response = await fetch("/api/logout", {
+    const response = await fetch(`${API_BASE_URL}/api/logout`, {
       method: "POST",
+      credentials: "include",
     });
 
     const data = await safeJson(response);
@@ -127,11 +133,12 @@ loginForm.addEventListener("submit", async (e) => {
   const password = document.getElementById("loginPassword").value.trim();
 
   try {
-    const response = await fetch("/api/login", {
+    const response = await fetch(`${API_BASE_URL}/api/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
+      credentials: "include",
       body: JSON.stringify({ pseudo, password }),
     });
 
@@ -162,11 +169,12 @@ registerForm.addEventListener("submit", async (e) => {
   const password = document.getElementById("registerPassword").value.trim();
 
   try {
-    const response = await fetch("/api/register", {
+    const response = await fetch(`${API_BASE_URL}/api/register`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
+      credentials: "include",
       body: JSON.stringify({ pseudo, password }),
     });
 
