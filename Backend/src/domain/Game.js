@@ -1,3 +1,4 @@
+import Card from "./Card.js";
 import Deck from "./Deck.js";
 import Player from "./Player.js";
 import {
@@ -14,7 +15,30 @@ export default class Game {
     this.dealer = new Player(0, "Dealer");
     this.deck = new Deck();
   }
+  addPlayer(id, name) {
+    const playerExists = this.players.find((p) => p.id === id);
+    if (playerExists) {
+      return { success: false, message: "Le joueurs est déjà dans la partie" };
+    }
 
+    if (this.players.length >= 1) {
+      return { success: false, message: "La table est pleine" };
+    }
+
+    const player = new Player(id, name);
+    this.players.push(player);
+    return { success: true, player };
+  }
+
+  removePlayer(id) {
+    this.players = this.players.filter((player) => player.id !== id);
+  }
+
+  restart(playerId, name) {
+    this.players.length = 0;
+    this.addPlayer(playerId, name);
+    this.start();
+  }
   start() {
     this.dealer = new Player(0, "Dealer");
     this.deck = new Deck();
@@ -33,45 +57,45 @@ export default class Game {
     this.dealer.addCard(this.deck.draw());
     this.dealer.hand[0].reveal();
   }
-  addPlayer(id, name) {
-    const player = new Player(id, name);
-    this.players.push(player);
-    return player;
-  }
-
-  removePlayer(id) {
-    this.players = this.players.filter((player) => player.id !== id);
-  }
 
   playerHit(playerId) {
     const player = this.players.find((p) => p.id === playerId);
 
     let result;
-    const card = this.deck.draw();
+    let card = this.deck.draw();
 
     if (player && player.status === "playing") {
-      player.addCard(card);
+      if (card.isAs()) {
+        result = {
+          status: "playing",
+          score: calculateHandValue(player.hand),
+          card: card,
+        };
+      } else {
+        player.addCard(card);
 
-      let score = calculateHandValue(player.hand);
-      if (isBust(player.hand)) {
-        player.changeStatus("bust");
-        result = { status: "bust", score: score, card: card };
-      }
+        let score = calculateHandValue(player.hand);
 
-      if (isBlackjack(player.hand)) {
-        player.changeStatus("blackjack");
-        result = { status: "blackjack", score: score, card: card };
-      }
+        if (isBust(player.hand)) {
+          player.changeStatus("bust");
+          result = { status: "bust", score: score, card: card };
+        }
 
-      if (is21(player.hand)) {
-        player.changeStatus("stood");
-        result = { status: "stood", score: score, card: card };
+        if (isBlackjack(player.hand)) {
+          player.changeStatus("blackjack");
+          result = { status: "blackjack", score: score, card: card };
+        }
+
+        if (is21(player.hand)) {
+          player.changeStatus("stood");
+          result = { status: "stood", score: score, card: card };
+        }
+        result = {
+          status: player.status,
+          score: score ?? calculateHandValue(player.hand),
+          card: card,
+        };
       }
-      result = {
-        status: player.status,
-        score: score ?? calculateHandValue(player.hand),
-        card: card,
-      };
     } else card = {};
 
     result = {
@@ -91,9 +115,9 @@ export default class Game {
     }
   }
 
-  applyAsValue(playerId, cardAlias, value) {
+  applyAs(playerId, cardSuit, value) {
     const player = this.players.find((p) => p.id === playerId);
-    player.applyAsValue(cardAlias, value);
+    player.addCard(new Card(cardSuit, "A", value));
   }
 
   dealerPlay() {
@@ -106,7 +130,7 @@ export default class Game {
       const card = this.deck.draw();
       if (card.isAs() && calculateHandValue(this.dealer.hand) > 10) {
         card.value = 1;
-      }
+      } else card.value = card.rank === "A" ? 11 : card.value;
 
       this.dealer.addCard(card);
       if (isBust(this.dealer.hand)) {
@@ -142,7 +166,9 @@ export default class Game {
 
   calulateResults() {
     if (this.players.some((player) => player.status === "playing")) {
-      console.log("joueurs en jeux ", this.players);
+      this.players.forEach((player) =>
+        console.log(player.status, calculateHandValue(player.hand)),
+      );
       return null;
     }
 
