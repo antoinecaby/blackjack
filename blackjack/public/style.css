@@ -1,15 +1,152 @@
 body {
-    margin: 0;
-    padding: 0;
-    color: rgba(255, 255, 255, 0.87);
-    background-color: #000000;
+  margin: 0;
+  padding: 0;
+  color: rgba(255, 255, 255, 0.87);
+  background-image: url("./assets/Background/backgroundCasino.jpg");
+  background-size: cover;
 }
 
 #app {
-    width: 100%;
-    height: 100vh;
-    overflow: hidden;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+h1 {
+  position: absolute;
+  top: 25%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: "Bebas Neue", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+  font-size: 100px;
+}
+
+.play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border: solid 1px red;
+  padding: 15px;
+  font-family: "Bebas Neue", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+  font-size: 50px;
+  text-decoration: none;
+  background-color: red;
+  border-radius: 10px;
+  color: white;
+  transition:
+    color 0.3s ease,
+    background-color 0.3s ease;
+}
+
+.play:hover {
+  color: red;
+  background-color: transparent;
+}
+
+.connect {
+  position: absolute;
+  top: 10%;
+  left: 85%;
+  transform: translate(-50%, -50%);
+  border: solid 1px red;
+  padding: 15px;
+  font-family: "Bebas Neue", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+  font-size: 40px;
+  text-decoration: none;
+  background-color: red;
+  border-radius: 10px;
+  color: white;
+  transition:
+    color 0.3s ease,
+    background-color 0.3s ease;
+}
+
+.connect:hover {
+  color: red;
+  background-color: transparent;
+}
+
+.popup {
+  display: none;
+  position: fixed;
+  z-index: 1;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.popup-content {
+  background-color: white;
+  margin: 10% auto;
+  padding: 20px;
+  width: 500px;
+  border-radius: 10px;
+  border: solid 1px red;
+}
+
+.popup-content h2 {
+  font-family: "Bebas Neue", sans-serif;
+  color: black;
+  text-align: center;
+  font-size: 40px;
+  margin: 0;
+}
+
+label {
+  display: block;
+  font-family: "Bebas Neue", sans-serif;
+  color: black;
+  font-size: 25px;
+  margin-top: 10px;
+}
+
+.close {
+  float: right;
+  font-size: 28px;
+  cursor: pointer;
+  color: red;
+}
+
+input {
+  width: 95%;
+  padding: 8px;
+  margin: 10px 0;
+  border: solid 1px #0b4d03;
+  border-radius: 10px;
+}
+
+button {
+  border: solid 1px red;
+  padding: 10px;
+  font-family: "Bebas Neue", sans-serif;
+  font-weight: 300;
+  font-style: normal;
+  font-size: 25px;
+  text-decoration: none;
+  background-color: red;
+  border-radius: 10px;
+  color: white;
+  transition:
+    color 0.3s ease,
+    background-color 0.3s ease;
+  cursor: pointer;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+button:hover {
+  color: red;
+  background-color: transparent;
 }
