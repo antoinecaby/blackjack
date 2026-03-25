@@ -96,7 +96,7 @@ async function checkAuth() {
       const statsBtn = document.getElementById("statsBtn");
       logoutBtn.addEventListener("click", logout);
       statsBtn.addEventListener("click", () => {
-        showMessage("Statistiques - Fonctionnalité à venir", false);
+        window.location.href = "/stats.html";
       });
     } else {
       authArea.innerHTML = `<button id="loginBtn" class="btn btn-primary">Se connecter</button>`;
@@ -207,3 +207,12 @@ registerForm.addEventListener("submit", async (e) => {
 
 attachLoginButtonEvent();
 checkAuth();
+
+// Play button handler
+const playBtn = document.getElementById("playBtn");
+if (playBtn) {
+  playBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    window.location.href = "./lobby.html";
+  });
+}
