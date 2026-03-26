@@ -5,6 +5,7 @@ import {
   emitInitialCardSend,
 } from "./emitters.js";
 import { getHitEventName } from "./events.js";
+import { Action, Partie } from "../../model/index.js";
 
 function formatPayload(payload) {
   try {
@@ -71,6 +72,96 @@ export function registerSocketHandlers({
   lobbyPlayersBySocketId,
   gameStartState,
 }) {
+  const resetRoundPersistenceState = () => {
+    gameStartState.playerGameIds.clear();
+    gameStartState.roundInitialized = false;
+    gameStartState.resultsPersisted = false;
+  };
+
+  const initializeRoundPersistence = async () => {
+    if (gameStartState.roundInitialized || game.players.length === 0) {
+      return;
+    }
+
+    const createdGames = await Promise.all(
+      game.players.map((player) =>
+        Partie.create({
+          id_joueur: player.id,
+          mise: 0,
+          resultat: "Égalité",
+          gain_perte: 0,
+          score_final_joueur: null,
+          date_partie: new Date(),
+        }),
+      ),
+    );
+
+    createdGames.forEach((partie, index) => {
+      const player = game.players[index];
+      if (!player) return;
+      gameStartState.playerGameIds.set(player.id, partie.id_partie);
+    });
+
+    gameStartState.roundInitialized = true;
+  };
+
+  const persistPlayerAction = async (playerId, typeAction, value) => {
+    const idPartie = gameStartState.playerGameIds.get(playerId);
+
+    if (!idPartie) {
+      return;
+    }
+
+    await Action.create({
+      id_partie: idPartie,
+      type_action: typeAction,
+      valeur_main: value,
+    });
+  };
+
+  const persistRoundResults = async (results) => {
+    if (!Array.isArray(results) || gameStartState.resultsPersisted) {
+      return;
+    }
+
+    const statusMap = {
+      win: "Victoire",
+      lost: "Défaite",
+      draw: "Égalité",
+      bust: "Bust",
+    };
+
+    await Promise.all(
+      results.map((result) => {
+        const idPartie = gameStartState.playerGameIds.get(result.player);
+        if (!idPartie) {
+          return Promise.resolve();
+        }
+
+        return Partie.update(
+          {
+            resultat: statusMap[result.status] ?? "Égalité",
+            gain_perte: 0,
+            score_final_joueur: result.score ?? null,
+          },
+          {
+            where: {
+              id_partie: idPartie,
+            },
+          },
+        );
+      }),
+    );
+
+    gameStartState.resultsPersisted = true;
+  };
+
+  const finalizeTurnAndPersist = async () => {
+    emitDealerStateIfNeeded(io, game);
+    const roundResults = emitGameResultsIfReady(io, game);
+    await persistRoundResults(roundResults);
+  };
+
   const allPendingJoined = () => {
     const pending = gameStartState.pendingPlayers;
 
@@ -87,6 +178,7 @@ export function registerSocketHandlers({
 
   const startGameIfReady = () => {
     if (allPendingJoined()) {
+      resetRoundPersistenceState();
       game.start();
       emitGameStarted(io, game);
       gameStartState.pendingPlayers = null;
@@ -230,12 +322,14 @@ export function registerSocketHandlers({
       return;
     }
 
+    resetRoundPersistenceState();
     game.start();
     emitGameStarted(io, game);
   });
 
   socket.on("PLAY_AGAIN", (playerId, name) => {
     logOn("PLAY_AGAIN", { playerId, name });
+    resetRoundPersistenceState();
     game.restart(playerId, name);
     console.log(`Player ${playerId} wants to play again: RESET`);
     emitGameStarted(io, game);
@@ -259,6 +353,7 @@ export function registerSocketHandlers({
       io.emit("PLAYER_LEFT_GAME", payload);
 
       if (game.players.length === 0) {
+        resetRoundPersistenceState();
         game.start();
         gameStartState.pendingPlayers = null;
         console.log("Table réinitialisée : plus aucun joueur");
@@ -268,20 +363,20 @@ export function registerSocketHandlers({
     socket.disconnect(true);
   });
 
-  socket.on("WAITING_INITIAL_CARDS", () => {
+  socket.on("WAITING_INITIAL_CARDS", async () => {
     logOn("WAITING_INITIAL_CARDS");
     console.log("Le client attend les cartes initiales");
     game.dealInitialCards();
+    await initializeRoundPersistence();
     emitInitialCardSend(io, game);
-    emitDealerStateIfNeeded(io, game);
-    emitGameResultsIfReady(io, game);
+    await finalizeTurnAndPersist();
   });
 
   socket.on("INITIAL_CARDS_RECEIVED", () => {
     logOn("INITIAL_CARDS_RECEIVED");
   });
 
-  socket.on("HIT", (playerId) => {
+  socket.on("HIT", async (playerId) => {
     logOn("HIT", { playerId });
     console.log(playerId, "demande une carte");
     const result = game.playerHit(playerId);
@@ -294,11 +389,11 @@ export function registerSocketHandlers({
     logEmit(event, result);
     io.emit(event, result);
 
-    emitDealerStateIfNeeded(io, game);
-    emitGameResultsIfReady(io, game);
+    await persistPlayerAction(playerId, "Tirer", result.score);
+    await finalizeTurnAndPersist();
   });
 
-  socket.on("STAND", (playerId) => {
+  socket.on("STAND", async (playerId) => {
     logOn("STAND", { playerId });
     const result = game.playerStand(playerId);
 
@@ -309,8 +404,8 @@ export function registerSocketHandlers({
     logEmit("PLAYER_STOOD", result);
     io.emit("PLAYER_STOOD", result);
 
-    emitDealerStateIfNeeded(io, game);
-    emitGameResultsIfReady(io, game);
+    await persistPlayerAction(playerId, "Rester", result.score);
+    await finalizeTurnAndPersist();
   });
 
   socket.on("DEALER_PLAY", () => {
@@ -335,6 +430,7 @@ export function registerSocketHandlers({
     game.removePlayer(player.playerId);
 
     if (game.players.length === 0) {
+      resetRoundPersistenceState();
       game.start();
       gameStartState.pendingPlayers = null;
       console.log("Table réinitialisée après déconnexion : plus aucun joueur");
