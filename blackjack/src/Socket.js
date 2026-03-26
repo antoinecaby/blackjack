@@ -7,7 +7,11 @@ export const socket = io("http://localhost:3000");
 
 socket.on("connected", () => {
   console.log("Connecté au serveur");
-  socket.emit("authenticate", "p1"); // Envoyer un message de test au serveur
+  socket.emit("JOIN_GAME", "p1"); // Envoyer un message de test au serveur
+  socket.emit("START_GAME"); // Envoyer un message de test au serveur
+  socket.on("GAME_STARTED", (data) => {
+    socket.emit("WAITING_INITIAL_CARDS");
+  });
 });
 
 // socket.on("disconnect", () => {
@@ -19,8 +23,9 @@ socket.on("CARD_RECEIVED", (data) => {
   console.log("Carte reçue du serveur", data);
 });
 socket.on("GAME_STARTED", (data) => {
-  console.log("Game started with data:", data);
+  console.log("Partie commencée avec les joueurs:", data);
 });
+
 function hit() {
   socket.emit("HIT");
 }
