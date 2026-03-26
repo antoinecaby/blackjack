@@ -1,3 +1,4 @@
+import Card from "./Card.js";
 import Deck from "./Deck.js";
 import Player from "./Player.js";
 import {
@@ -14,8 +15,34 @@ export default class Game {
     this.dealer = new Player(0, "Dealer");
     this.deck = new Deck();
   }
+  addPlayer(id, name) {
+    const playerExists = this.players.find((p) => p.id === id);
+    if (playerExists) {
+      return { success: false, message: "Le joueurs est déjà dans la partie" };
+    }
 
+    if (this.players.length >= 1) {
+      return { success: false, message: "La table est pleine" };
+    }
+
+    const player = new Player(id, name);
+    this.players.push(player);
+    return { success: true, player };
+  }
+
+  removePlayer(id) {
+    this.players = this.players.filter((player) => player.id !== id);
+  }
+
+  restart(playerId, name) {
+    this.players.length = 0;
+    this.addPlayer(playerId, name);
+    this.start();
+  }
   start() {
+    this.dealer = new Player(0, "Dealer");
+    this.deck = new Deck();
+
     this.dealInitialCards();
   }
 
@@ -30,38 +57,53 @@ export default class Game {
     this.dealer.addCard(this.deck.draw());
     this.dealer.hand[0].reveal();
   }
-  addPlayer(id, name) {
-    const player = new Player(id, name);
-    this.players.push(player);
-    return player;
-  }
-
-  removePlayer(id) {
-    this.players = this.players.filter((player) => player.id !== id);
-  }
 
   playerHit(playerId) {
     const player = this.players.find((p) => p.id === playerId);
+
+    let result;
+    let card = this.deck.draw();
+
     if (player && player.status === "playing") {
-      const card = this.deck.draw();
-      player.addCard(card);
-      console.log("Envoyer la nouvelle carte au client");
+      if (card.isAs()) {
+        result = {
+          status: "playing",
+          score: calculateHandValue(player.hand),
+          card: card,
+        };
+      } else {
+        player.addCard(card);
 
-      if (isBust(player.hand)) {
-        player.changeStatus("bust");
-        console.log("Envoyer le résultat de bust au client");
-      }
+        let score = calculateHandValue(player.hand);
 
-      if (isBlackjack(player.hand)) {
-        player.changeStatus("blackjack");
-        console.log("Envoyer le résultat de blackjack au client");
-      }
+        if (isBust(player.hand)) {
+          player.changeStatus("bust");
+          result = { status: "bust", score: score, card: card };
+        }
 
-      if (is21(player.hand)) {
-        player.changeStatus("stood");
-        console.log("Envoyer le résultat de 21 au client");
+        if (isBlackjack(player.hand)) {
+          player.changeStatus("blackjack");
+          result = { status: "blackjack", score: score, card: card };
+        }
+
+        if (is21(player.hand)) {
+          player.changeStatus("stood");
+          result = { status: "stood", score: score, card: card };
+        }
+        result = {
+          status: player.status,
+          score: score ?? calculateHandValue(player.hand),
+          card: card,
+        };
       }
-    }
+    } else card = {};
+
+    result = {
+      status: player.status,
+      score: calculateHandValue(player.hand),
+      card: card,
+    };
+    return result;
   }
 
   playerStand(playerId) {
@@ -69,49 +111,112 @@ export default class Game {
     if (player && player.status === "playing") {
       player.changeStatus("stood");
       console.log("Envoyer le résultat de stand au client");
+      return { status: "stood", score: calculateHandValue(player.hand) };
     }
+  }
+
+  applyAs(playerId, cardSuit, value) {
+    const player = this.players.find((p) => p.id === playerId);
+    player.addCard(new Card(cardSuit, "A", value));
   }
 
   dealerPlay() {
     if (this.players.every((player) => player.status !== "playing")) {
       this.dealer.changeStatus("stood");
-      console.log("Envoyer le résultat de stand du dealer au client");
-      return;
+      return { status: "stood", score: calculateHandValue(this.dealer.hand) };
     }
+
     while (shouldDealerHit(this.dealer.hand)) {
-      this.dealer.addCard(this.deck.draw());
-      console.log("Envoyer la nouvelle carte du dealer au client");
+      const card = this.deck.draw();
+      if (card.isAs() && calculateHandValue(this.dealer.hand) > 10) {
+        card.value = 1;
+      } else card.value = card.rank === "A" ? 11 : card.value;
+
+      this.dealer.addCard(card);
       if (isBust(this.dealer.hand)) {
         this.dealer.changeStatus("bust");
-        console.log("Envoyer le résultat de bust du dealer au client");
-        break;
+        return {
+          status: "bust",
+          score: calculateHandValue(this.dealer.hand),
+          card: card,
+        };
       }
     }
     if (this.dealer.status !== "bust") {
       this.dealer.changeStatus("stood");
-      console.log("Envoyer le résultat de stand du dealer au client");
+      return {
+        status: "stood",
+        score: calculateHandValue(this.dealer.hand),
+        card: card,
+      };
     }
+    return {
+      status: this.dealer.status,
+      score: calculateHandValue(this.dealer.hand),
+      card: card,
+    };
+  }
+
+  dealerCanPlay() {
+    return (
+      this.dealer.status === "playing" &&
+      !this.players.some((player) => player.status === "playing")
+    );
   }
 
   calulateResults() {
+    if (this.players.some((player) => player.status === "playing")) {
+      this.players.forEach((player) =>
+        console.log(player.status, calculateHandValue(player.hand)),
+      );
+      return null;
+    }
+
+    let resultats = [];
     this.players.forEach((player) => {
       if (player.status === "bust") {
-        console.log("[FIN] Envoyer le résultat de lose au client");
+        player.changeStatus("lost");
+        resultats.push({
+          player: player.id,
+          status: "lost",
+          score: calculateHandValue(player.hand),
+        });
       } else if (this.dealer.status === "bust") {
-        console.log("[FIN] Envoyer le résultat de win au client");
+        player.changeStatus("win");
+        resultats.push({
+          player: player.id,
+          status: "win",
+          score: calculateHandValue(player.hand),
+        });
       } else {
         if (
           calculateHandValue(player.hand) > calculateHandValue(this.dealer.hand)
         ) {
-          console.log("[FIN] Envoyer le résultat de win au client");
+          player.changeStatus("win");
+          resultats.push({
+            player: player.id,
+            status: "win",
+            score: calculateHandValue(player.hand),
+          });
         } else if (
           calculateHandValue(player.hand) < calculateHandValue(this.dealer.hand)
         ) {
-          console.log("[FIN] Envoyer le résultat de lost au client");
+          player.changeStatus("lost");
+          resultats.push({
+            player: player.id,
+            status: "lost",
+            score: calculateHandValue(player.hand),
+          });
         } else {
-          console.log("[FIN] Envoyer le résultat de draw au client");
+          player.changeStatus("draw");
+          resultats.push({
+            player: player.id,
+            status: "draw",
+            score: calculateHandValue(player.hand),
+          });
         }
       }
     });
+    return resultats;
   }
 }

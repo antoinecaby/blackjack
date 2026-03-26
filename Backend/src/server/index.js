@@ -6,7 +6,11 @@ import mysql from "mysql2/promise";
 import bcrypt from "bcrypt";
 import session from "express-session";
 import cors from "cors";
-
+import http from "http";
+import { Server } from "socket.io";
+import Card from "../domain/Card.js";
+import initSocket from "./socket.js";
+import Game from "../domain/Game.js";
 dotenv.config();
 
 const app = express();
@@ -62,12 +66,10 @@ io.on("connection", (socket) => {
 
   socket.on("JOIN_LOBBY", (data) => {
     console.log(`Joueur ${data.playerId} (${data.name}) rejoint le lobby`);
-    
+
     // Check if player already in lobby
-    const existingPlayer = lobby.players.find(
-      (p) => p.id === data.playerId
-    );
-    
+    const existingPlayer = lobby.players.find((p) => p.id === data.playerId);
+
     if (!existingPlayer) {
       const newPlayer = {
         id: data.playerId,
@@ -76,7 +78,7 @@ io.on("connection", (socket) => {
         status: "ready",
       };
       lobby.players.push(newPlayer);
-      
+
       // Notify all players that someone joined
       io.emit("PLAYER_JOINED", {
         playerName: newPlayer.name,
@@ -86,7 +88,7 @@ io.on("connection", (socket) => {
           status: p.status,
         })),
       });
-      
+
       // Send updated lobby to new player
       socket.emit("LOBBY_UPDATED", {
         players: lobby.players.map((p) => ({
@@ -96,20 +98,18 @@ io.on("connection", (socket) => {
         })),
       });
     }
-    
+
     socket.join("lobby");
   });
 
   socket.on("LEAVE_LOBBY", (data) => {
     console.log(`Joueur ${data.playerId} quitte le lobby`);
-    const playerIndex = lobby.players.findIndex(
-      (p) => p.id === data.playerId
-    );
-    
+    const playerIndex = lobby.players.findIndex((p) => p.id === data.playerId);
+
     if (playerIndex !== -1) {
       const removedPlayer = lobby.players[playerIndex];
       lobby.players.splice(playerIndex, 1);
-      
+
       // Notify all players that someone left
       io.emit("PLAYER_LEFT", {
         playerName: removedPlayer.name,
@@ -120,13 +120,13 @@ io.on("connection", (socket) => {
         })),
       });
     }
-    
+
     socket.leave("lobby");
   });
 
   socket.on("START_GAME", () => {
     console.log("Démarrage de la partie");
-    
+
     if (lobby.players.length > 0) {
       // Notify all players that game is starting
       io.emit("GAME_STARTING", {
@@ -135,7 +135,7 @@ io.on("connection", (socket) => {
           name: p.name,
         })),
       });
-      
+
       // Clear lobby for next game
       setTimeout(() => {
         lobby.players = [];
@@ -145,16 +145,16 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     console.log(`Joueur déconnecté: ${socket.id}`);
-    
+
     // Remove player from lobby if they disconnect
     const playerIndex = lobby.players.findIndex(
-      (p) => p.socketId === socket.id
+      (p) => p.socketId === socket.id,
     );
-    
+
     if (playerIndex !== -1) {
       const removedPlayer = lobby.players[playerIndex];
       lobby.players.splice(playerIndex, 1);
-      
+
       // Notify all players that someone left
       io.emit("PLAYER_LEFT", {
         playerName: removedPlayer.name,
