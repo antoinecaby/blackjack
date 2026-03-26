@@ -1,5 +1,5 @@
 import socketManager from "/src/socket/SocketManager.js";
-import { ClientEvents, ServerEvents } from "/src/socket/SocketEvents.js";
+import { ClientEvents } from "/src/socket/SocketEvents.js";
 
 class LobbyManager {
   constructor() {
@@ -28,7 +28,6 @@ class LobbyManager {
 
     try {
       await socketManager.connect();
-      console.log("Socket connecté au lobby");
 
       socketManager.emit(ClientEvents.JOIN_LOBBY, {
         playerId: this.currentPlayer.id_joueur,
@@ -64,7 +63,6 @@ class LobbyManager {
 
   setupSocketListeners() {
     socketManager.onLobbyUpdated((data) => {
-      console.log("Lobby mis à jour:", data);
       this.players = data.players || [];
       this.updatePlayersList();
       this.updatePlayerCount();
@@ -72,7 +70,6 @@ class LobbyManager {
     });
 
     socketManager.onPlayerJoined((data) => {
-      console.log("Joueur rejoint:", data);
       this.players = data.players || [];
       this.updatePlayersList();
       this.updatePlayerCount();
@@ -80,7 +77,6 @@ class LobbyManager {
     });
 
     socketManager.onPlayerLeft((data) => {
-      console.log("Joueur quitté:", data);
       this.players = data.players || [];
       this.updatePlayersList();
       this.updatePlayerCount();
@@ -88,11 +84,13 @@ class LobbyManager {
     });
 
     socketManager.onGameStarting((data) => {
-      console.log("Partie en cours de démarrage:", data);
       this.gameStarting = true;
 
+      const hostPlayerId = data?.players?.[0]?.id;
+      const isHost = hostPlayerId === this.currentPlayer?.id_joueur;
+
       setTimeout(() => {
-        window.location.href = "./index.html";
+        window.location.href = `./index.html?host=${isHost ? "1" : "0"}`;
       }, 1500);
     });
 
@@ -140,10 +138,6 @@ class LobbyManager {
     startBtn.disabled = !(playersCount >= 1 && isDealer && !this.gameStarting);
   }
 
-  showNotification(message, type = "success") {
-    console.log(`[${type}] ${message}`);
-  }
-
   leaveLobby() {
     if (this.currentPlayer) {
       socketManager.leaveLobby(this.currentPlayer.id_joueur);
@@ -154,7 +148,6 @@ class LobbyManager {
   startGame() {
     if (!this.gameStarting && this.players.length > 0) {
       socketManager.startGame();
-      console.log("Demarrage de la partie...");
     }
   }
 }

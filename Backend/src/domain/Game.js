@@ -10,23 +10,54 @@ import {
 } from "./Rules.js";
 
 export default class Game {
-  constructor() {
+  constructor(maxPlayers = 4) {
+    this.maxPlayers = maxPlayers;
     this.players = [];
     this.dealer = new Player(0, "Dealer");
     this.deck = new Deck();
+    this.initialDealDone = false;
   }
+
+  serializePlayer(player) {
+    return {
+      id: player.id,
+      name: player.name,
+      status: player.status,
+      hand: [...player.hand],
+      score: calculateHandValue(player.hand),
+    };
+  }
+
+  serializeDealer() {
+    return {
+      id: 0,
+      name: "Dealer",
+      status: this.dealer.status,
+      hand: [...this.dealer.hand],
+      score: calculateHandValue(this.dealer.hand),
+    };
+  }
+
+  getSnapshot() {
+    return {
+      players: this.players.map((player) => this.serializePlayer(player)),
+      dealer: this.serializeDealer(),
+    };
+  }
+
   addPlayer(id, name) {
-    const playerExists = this.players.find((p) => p.id === id);
+    const playerExists = this.players.find((player) => player.id === id);
     if (playerExists) {
-      return { success: false, message: "Le joueurs est déjà dans la partie" };
+      return { success: false, message: "Le joueur est déjà dans la partie" };
     }
 
-    if (this.players.length >= 1) {
+    if (this.players.length >= this.maxPlayers) {
       return { success: false, message: "La table est pleine" };
     }
 
     const player = new Player(id, name);
     this.players.push(player);
+
     return { success: true, player };
   }
 
@@ -35,17 +66,35 @@ export default class Game {
   }
 
   restart(playerId, name) {
-    this.players.length = 0;
-    this.addPlayer(playerId, name);
+    const alreadySeated = this.players.some((player) => player.id === playerId);
+
+    if (!alreadySeated) {
+      this.addPlayer(playerId, name);
+    }
+
     this.start();
   }
+
   start() {
+    const existingPlayers = this.players.map((player) => ({
+      id: player.id,
+      name: player.name,
+    }));
+
+    this.players = existingPlayers.map(
+      (player) => new Player(player.id, player.name),
+    );
+
     this.dealer = new Player(0, "Dealer");
     this.deck = new Deck();
+    this.initialDealDone = false;
   }
 
   dealInitialCards() {
-    this.deck.shuffle();
+    if (this.initialDealDone) {
+      return this.getSnapshot();
+    }
+
     this.players.forEach((player) => {
       this.playerHit(player.id);
       this.playerHit(player.id);
@@ -53,111 +102,113 @@ export default class Game {
 
     this.dealer.addCard(this.deck.draw());
     this.dealer.addCard(this.deck.draw());
-    this.dealer.hand[0].reveal();
+
+    if (this.dealer.hand[0]) {
+      this.dealer.hand[0].reveal();
+    }
+
+    this.initialDealDone = true;
+    return this.getSnapshot();
   }
 
   playerHit(playerId) {
-    const player = this.players.find((p) => p.id === playerId);
+    const player = this.players.find((entry) => entry.id === playerId);
 
-    let result;
-    let card = this.deck.draw();
+    if (!player || player.status !== "playing") {
+      return null;
+    }
 
-    if (player && player.status === "playing") {
-      if (card.isAs()) {
-        result = {
-          status: "playing",
-          score: calculateHandValue(player.hand),
-          card: card,
-          asCount: 1,
-        };
-      } else {
-        player.addCard(card);
+    const card = this.deck.draw();
 
-        let score = calculateHandValue(player.hand);
+    if (card.isAs()) {
+      const currentScore = calculateHandValue(player.hand);
+      card.value = currentScore + 11 > 21 ? 1 : 11;
+    }
 
-        if (isBust(player.hand)) {
-          player.changeStatus("bust");
-          result = { status: "bust", score: score, card: card };
-        }
+    player.addCard(card);
 
-        if (isBlackjack(player.hand)) {
-          player.changeStatus("blackjack");
-          result = { status: "blackjack", score: score, card: card };
-        }
+    const score = calculateHandValue(player.hand);
 
-        if (is21(player.hand)) {
-          player.changeStatus("stood");
-          result = { status: "stood", score: score, card: card };
-        }
-        result = {
-          status: player.status,
-          score: score ?? calculateHandValue(player.hand),
-          card: card,
-        };
-      }
-    } else card = {};
+    if (isBust(player.hand)) {
+      player.changeStatus("bust");
+    } else if (isBlackjack(player.hand)) {
+      player.changeStatus("blackjack");
+    } else if (is21(player.hand)) {
+      player.changeStatus("stood");
+    }
 
-    result = {
+    return {
+      playerId: player.id,
       status: player.status,
-      score: calculateHandValue(player.hand),
-      card: card,
+      score,
+      card,
+      hand: [...player.hand],
     };
-    return result;
   }
 
   playerStand(playerId) {
-    const player = this.players.find((p) => p.id === playerId);
-    if (player && player.status === "playing") {
-      player.changeStatus("stood");
-      console.log("Envoyer le résultat de stand au client");
-      return { status: "stood", score: calculateHandValue(player.hand) };
+    const player = this.players.find((entry) => entry.id === playerId);
+
+    if (!player || player.status !== "playing") {
+      return null;
     }
+
+    player.changeStatus("stood");
+
+    return {
+      playerId: player.id,
+      status: "stood",
+      score: calculateHandValue(player.hand),
+      hand: [...player.hand],
+    };
   }
 
   applyAs(playerId, cardSuit, value) {
-    const player = this.players.find((p) => p.id === playerId);
+    const player = this.players.find((entry) => entry.id === playerId);
+    if (!player) return null;
+
     player.addCard(new Card(cardSuit, "A", value));
+    return this.serializePlayer(player);
   }
 
   dealerPlay() {
-    if (this.players.every((player) => player.status !== "playing")) {
-      this.dealer.changeStatus("stood");
-      return { status: "stood", score: calculateHandValue(this.dealer.hand) };
-    }
+    let lastCard = null;
 
     while (shouldDealerHit(this.dealer.hand)) {
       const card = this.deck.draw();
-      if (card.isAs() && calculateHandValue(this.dealer.hand) > 10) {
-        card.value = 1;
-      } else card.value = card.rank === "A" ? 11 : card.value;
+
+      if (card.isAs()) {
+        const currentScore = calculateHandValue(this.dealer.hand);
+        card.value = currentScore + 11 > 21 ? 1 : 11;
+      }
 
       this.dealer.addCard(card);
+      lastCard = card;
+
       if (isBust(this.dealer.hand)) {
         this.dealer.changeStatus("bust");
         return {
           status: "bust",
           score: calculateHandValue(this.dealer.hand),
-          card: card,
+          card: lastCard,
+          hand: [...this.dealer.hand],
         };
       }
     }
-    if (this.dealer.status !== "bust") {
-      this.dealer.changeStatus("stood");
-      return {
-        status: "stood",
-        score: calculateHandValue(this.dealer.hand),
-        card: card,
-      };
-    }
+
+    this.dealer.changeStatus("stood");
+
     return {
-      status: this.dealer.status,
+      status: "stood",
       score: calculateHandValue(this.dealer.hand),
-      card: card,
+      card: lastCard,
+      hand: [...this.dealer.hand],
     };
   }
 
   dealerCanPlay() {
     return (
+      this.players.length > 0 &&
       this.dealer.status === "playing" &&
       !this.players.some((player) => player.status === "playing")
     );
@@ -165,57 +216,59 @@ export default class Game {
 
   calulateResults() {
     if (this.players.some((player) => player.status === "playing")) {
-      this.players.forEach((player) =>
-        console.log(player.status, calculateHandValue(player.hand)),
-      );
       return null;
     }
 
-    let resultats = [];
+    const dealerScore = calculateHandValue(this.dealer.hand);
+    const results = [];
+
     this.players.forEach((player) => {
+      const playerScore = calculateHandValue(player.hand);
+
       if (player.status === "bust") {
         player.changeStatus("lost");
-        resultats.push({
+        results.push({
           player: player.id,
           status: "lost",
-          score: calculateHandValue(player.hand),
+          score: playerScore,
         });
-      } else if (this.dealer.status === "bust") {
+        return;
+      }
+
+      if (this.dealer.status === "bust") {
         player.changeStatus("win");
-        resultats.push({
+        results.push({
           player: player.id,
           status: "win",
-          score: calculateHandValue(player.hand),
+          score: playerScore,
+        });
+        return;
+      }
+
+      if (playerScore > dealerScore) {
+        player.changeStatus("win");
+        results.push({
+          player: player.id,
+          status: "win",
+          score: playerScore,
+        });
+      } else if (playerScore < dealerScore) {
+        player.changeStatus("lost");
+        results.push({
+          player: player.id,
+          status: "lost",
+          score: playerScore,
         });
       } else {
-        if (
-          calculateHandValue(player.hand) > calculateHandValue(this.dealer.hand)
-        ) {
-          player.changeStatus("win");
-          resultats.push({
-            player: player.id,
-            status: "win",
-            score: calculateHandValue(player.hand),
-          });
-        } else if (
-          calculateHandValue(player.hand) < calculateHandValue(this.dealer.hand)
-        ) {
-          player.changeStatus("lost");
-          resultats.push({
-            player: player.id,
-            status: "lost",
-            score: calculateHandValue(player.hand),
-          });
-        } else {
-          player.changeStatus("draw");
-          resultats.push({
-            player: player.id,
-            status: "draw",
-            score: calculateHandValue(player.hand),
-          });
-        }
+        player.changeStatus("draw");
+        results.push({
+          player: player.id,
+          status: "draw",
+          score: playerScore,
+        });
       }
     });
-    return resultats;
+
+    return results;
   }
 }
