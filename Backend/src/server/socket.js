@@ -52,11 +52,10 @@ export default function initSocket(io, game) {
     socket.emit("connected");
 
     socket.on("JOIN_GAME", (playerId, name) => {
+      console.log(`[SOCKET] JOIN_GAME: ${playerId} - ${name}`);
       let result = game.addPlayer(playerId, name);
       if (!result.success) {
-        console.log(
-          `Le joueur ${playerId} est déjà dans la partie ou la table est pleine`,
-        );
+        console.log(`[SOCKET] ❌ Impossible d'ajouter ${playerId}: ${result.message}`);
         socket.emit("JOIN_GAME_FAILED", { message: result.message });
         return;
       }
@@ -66,7 +65,7 @@ export default function initSocket(io, game) {
         playerId: playerId,
         name: name,
       });
-      console.log(`Le joueur ${playerId} a rejoint la partie`);
+      console.log(`[SOCKET] ✅ Joueur ${playerId} ajouté. Total: ${game.players.length}`);
       socket.emit("JOIN_GAME_SUCCESS", { playerId });
     });
 
@@ -89,6 +88,64 @@ export default function initSocket(io, game) {
         });
         console.log("dealer:", calculateHandValue(game.dealer.hand));
         emitGameStarted();
+      }
+    });
+
+    socket.on("DEAL", (data) => {
+      console.log("[SOCKET] ⭐ DEAL reçu:", data);
+      const { playerId, betAmount } = data;
+      
+      console.log(`[SOCKET] DEAL - playerId: ${playerId}, bet: ${betAmount}`);
+      console.log(`[SOCKET] Players actuels:`, game.players.map(p => ({ id: p.id, name: p.name })));
+      
+      // Vérifier que le joueur existe
+      const player = game.players.find((p) => p.id === playerId);
+      if (!player) {
+        console.error(`[SOCKET] ❌ Joueur non trouvé: ${playerId}`);
+        socket.emit("ERROR", { message: "Joueur non trouvé" });
+        return;
+      }
+
+      console.log(`[SOCKET] ✅ Joueur trouvé: ${player.name}`);
+
+      // Démarrer la partie (distribue les cartes)
+      try {
+        game.start();
+        console.log("[SOCKET] ✅ game.start() exécuté");
+      } catch (err) {
+        console.error("[SOCKET] ❌ Erreur game.start():", err);
+        socket.emit("ERROR", { message: "Erreur démarrage partie" });
+        return;
+      }
+      
+      console.log("[SOCKET] Cartes distribuées");
+      
+      // Vérifier s'il y a un As à gérer
+      let playerWithAs = game.players.find((player) => {
+        return player.hand.find((card) => card.isAs());
+      });
+
+      if (playerWithAs) {
+        console.log(`[SOCKET] As détecté chez ${playerWithAs.name}`);
+        io.emit("SELECT_AS_VALUE", {
+          status: "playing",
+          playerId: playerWithAs.id,
+          player: playerWithAs,
+          card: playerWithAs.hand.find((card) => card.isAs()),
+        });
+      } else {
+        console.log("[SOCKET] ✅ Pas d'As, émission GAME_STARTED");
+        // Envoyer les cartes initiales
+        game.players.forEach((player) => {
+          console.log(`[SOCKET] ${player.name}: ${player.hand.map(c => c.alias).join(", ")}`);
+        });
+        console.log(`[SOCKET] Dealer: ${game.dealer.hand.map(c => c.alias).join(", ")}`);
+        
+        io.emit("GAME_STARTED", {
+          players: game.players,
+          dealer: game.dealer.hand,
+        });
+        console.log("[SOCKET] ✅ GAME_STARTED émis");
       }
     });
 
