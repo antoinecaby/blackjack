@@ -42,8 +42,6 @@ export default class Game {
   start() {
     this.dealer = new Player(0, "Dealer");
     this.deck = new Deck();
-
-    this.dealInitialCards();
   }
 
   dealInitialCards() {
@@ -70,6 +68,7 @@ export default class Game {
           status: "playing",
           score: calculateHandValue(player.hand),
           card: card,
+          asCount: 1,
         };
       } else {
         player.addCard(card);
