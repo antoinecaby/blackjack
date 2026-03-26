@@ -4,7 +4,8 @@ import { Server } from "socket.io";
 
 import app from "./app.js";
 import { connect } from "./framework/connexion.js";
-import registerLobbySocket from "./sockets/lobby.socket.js";
+import Game from "./domain/Game.js";
+import initSocket from "./server/socket.js";
 
 const PORT = process.env.PORT || 3000;
 
@@ -17,7 +18,9 @@ const io = new Server(server, {
   },
 });
 
-registerLobbySocket(io);
+let game = new Game();
+
+initSocket(io, game);
 
 const startServer = async () => {
   try {

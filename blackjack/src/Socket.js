@@ -1,31 +1,79 @@
 import { io } from "socket.io-client";
-import ImageView from "./Manager/ImageView";
-import { getCard } from "./Manager/AssetsManager";
-import Scene from "./Scene";
 
-export const socket = io("http://localhost:3000");
+const SERVER_URL = "http://localhost:3000";
 
-socket.on("connected", () => {
-  console.log("Connecté au serveur");
-  socket.emit("JOIN_GAME", "p1"); // Envoyer un message de test au serveur
-  socket.emit("START_GAME"); // Envoyer un message de test au serveur
-  socket.on("GAME_STARTED", (data) => {
-    socket.emit("WAITING_INITIAL_CARDS");
-  });
-});
+class GameSocket {
+  constructor() {
+    this.socket = null;
+  }
 
-// socket.on("disconnect", () => {
-//   socket.emit("disconnect", "p1");
-// });
+  connect() {
+    if (this.socket?.connected) {
+      return Promise.resolve(this.socket);
+    }
 
-socket.on("HIT", (carte) => {});
-socket.on("CARD_RECEIVED", (data) => {
-  console.log("Carte reçue du serveur", data);
-});
-socket.on("GAME_STARTED", (data) => {
-  console.log("Partie commencée avec les joueurs:", data);
-});
+    if (!this.socket) {
+      this.socket = io(SERVER_URL, {
+        transports: ["websocket"],
+        withCredentials: true,
+      });
+    }
 
-function hit() {
-  socket.emit("HIT");
+    return new Promise((resolve, reject) => {
+      const onConnect = () => {
+        this.socket.off("connect_error", onError);
+        resolve(this.socket);
+      };
+
+      const onError = (error) => {
+        this.socket.off("connect", onConnect);
+        reject(error);
+      };
+
+      this.socket.once("connect", onConnect);
+      this.socket.once("connect_error", onError);
+    });
+  }
+
+  on(eventName, callback) {
+    this.socket?.on(eventName, callback);
+  }
+
+  off(eventName, callback) {
+    this.socket?.off(eventName, callback);
+  }
+
+  emit(eventName, ...args) {
+    this.socket?.emit(eventName, ...args);
+  }
+
+  joinGame(playerId, name) {
+    this.emit("JOIN_GAME", playerId, name);
+  }
+
+  startGame() {
+    this.emit("START_GAME");
+  }
+
+  waitingInitialCards() {
+    this.emit("WAITING_INITIAL_CARDS");
+  }
+
+  hit(playerId) {
+    this.emit("HIT", playerId);
+  }
+
+  stand(playerId) {
+    this.emit("STAND", playerId);
+  }
+
+  playAgain(playerId, name) {
+    this.emit("PLAY_AGAIN", playerId, name);
+  }
+
+  disconnect() {
+    this.socket?.disconnect();
+  }
 }
+
+export const socket = new GameSocket();
